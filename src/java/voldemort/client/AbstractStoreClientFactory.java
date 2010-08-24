@@ -86,7 +86,8 @@ public abstract class AbstractStoreClientFactory implements StoreClientFactory {
     private final int jmxId;
     protected volatile FailureDetector failureDetector;
     private final int maxBootstrapRetries;
-    private final StoreStats stats;
+    private final StoreStats routedStats;
+    private final StoreStats entireStats;
     private final ClientConfig config;
     private final RoutedStoreFactory routedStoreFactory;
     private final int clientZoneId;
@@ -102,7 +103,8 @@ public abstract class AbstractStoreClientFactory implements StoreClientFactory {
         this.requestFormatType = config.getRequestFormatType();
         this.jmxId = jmxIdCounter.getAndIncrement();
         this.maxBootstrapRetries = config.getMaxBootstrapRetries();
-        this.stats = new StoreStats();
+        this.routedStats = new StoreStats();
+        this.entireStats = new StoreStats();
         this.clientZoneId = config.getClientZoneId();
         this.routedStoreFactory = new RoutedStoreFactory(config.isPipelineRoutedStoreEnabled(),
                                                          threadPool,
@@ -113,8 +115,8 @@ public abstract class AbstractStoreClientFactory implements StoreClientFactory {
                                    JmxUtils.createObjectName(JmxUtils.getPackageName(threadPool.getClass()),
                                                              JmxUtils.getClassName(threadPool.getClass())
                                                                      + jmxId()));
-            JmxUtils.registerMbean(new StoreStatsJmx(stats),
-                                   JmxUtils.createObjectName("voldemort.store.stats.aggregate",
+            JmxUtils.registerMbean(new StoreStatsJmx(routedStats),
+                                   JmxUtils.createObjectName("voldemort.store.routedStats.aggregate",
                                                              "aggregate-perf" + jmxId()));
         }
     }
@@ -172,11 +174,11 @@ public abstract class AbstractStoreClientFactory implements StoreClientFactory {
                                                                    getFailureDetector());
 
         if(isJmxEnabled) {
-            StatTrackingStore statStore = new StatTrackingStore(store, this.stats);
+            StatTrackingStore statStore = new StatTrackingStore(store, this.routedStats);
             store = statStore;
             JmxUtils.registerMbean(new StoreStatsJmx(statStore.getStats()),
                                    JmxUtils.createObjectName(JmxUtils.getPackageName(store.getClass()),
-                                                             store.getName() + jmxId()));
+                                                             store.getName() + "-Routing" + jmxId()));
         }
 
         if(storeDef.getKeySerializer().hasCompression()
@@ -197,6 +199,14 @@ public abstract class AbstractStoreClientFactory implements StoreClientFactory {
         serializedStore = new InconsistencyResolvingStore<K, V>(serializedStore,
                                                                 new ChainedResolver<Versioned<V>>(new VectorClockInconsistencyResolver(),
                                                                                                   secondaryResolver));
+
+        if(isJmxEnabled) {
+            StatTrackingStore statStore = new StatTrackingStore(serializedStore, this.entireStats);
+            serializedStore = statStore;
+            JmxUtils.registerMbean(new StoreStatsJmx(statStore.getStats()),
+                                   JmxUtils.createObjectName(JmxUtils.getPackageName(serializedStore.getClass()),
+                                                             serializedStore.getName() + "-Entire" + jmxId()));
+        }
         return serializedStore;
     }
 
@@ -329,7 +339,7 @@ public abstract class AbstractStoreClientFactory implements StoreClientFactory {
     }
 
     /* Give a unique id to avoid jmx clashes */
-    private String jmxId() {
+    protected String jmxId() {
         return jmxId == 0 ? "" : Integer.toString(jmxId);
     }
 
