@@ -64,8 +64,12 @@ public class SocketStoreClientFactory extends AbstractStoreClientFactory {
                                                           config.getSocketTimeout(TimeUnit.MILLISECONDS),
                                                           config.getSocketBufferSize(),
                                                           config.getSocketKeepAlive());
-        if(config.isJmxEnabled())
-            JmxUtils.registerMbean(storeFactory, JmxUtils.createObjectName(storeFactory.getClass()));
+        if(config.isJmxEnabled()) {
+            JmxUtils.registerMbean(storeFactory,
+                                   JmxUtils.createObjectName(JmxUtils.getPackageName(storeFactory.getClass()),
+                                                             JmxUtils.getClassName(storeFactory.getClass())
+                                                                     + jmxId()));
+        }
     }
 
     @Override
